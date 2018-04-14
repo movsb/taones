@@ -232,6 +232,7 @@ func main() {
 	sizeStr := ""
 	pageStr := ""
 	cycleStr := ""
+	funcStr := ""
 	nameStr := ""
 
 	for i, opc := range opcTable256 {
@@ -244,7 +245,8 @@ func main() {
 			name = "bad"
 		}
 
-		nameStr += fmt.Sprintf("o.%s, ", name)
+		funcStr += fmt.Sprintf("o.%s, ", name)
+		nameStr += fmt.Sprintf("\"%s\", ", name)
 
 		if (i+1)%16 == 0 {
 			modeStr += "\n"
@@ -253,11 +255,12 @@ func main() {
 			cycleStr += "\n"
 		}
 		if (i+1)%8 == 0 {
+			funcStr += "\n"
 			nameStr += "\n"
 		}
 	}
 
-	fmt.Printf("modeString:\n%s\n\nsizeStr:\n%s\n\npageStr:\n%s\n\ncycleStr:\n%s\n\nnameStr:\n%s\n\n",
-		modeStr, sizeStr, pageStr, cycleStr, nameStr,
+	fmt.Printf("modeString:\n%s\n\nsizeStr:\n%s\n\npageStr:\n%s\n\ncycleStr:\n%s\n\nfuncStr:\n%s\n\nnameStr:\n%s\n\n",
+		modeStr, sizeStr, pageStr, cycleStr, funcStr, nameStr,
 	)
 }

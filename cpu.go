@@ -1,5 +1,11 @@
 package main
 
+import (
+	"fmt"
+)
+
+const cpuFreq = 1789773
+
 // 寻址模式（Addressing Modes）
 const (
 	_                 byte = iota
@@ -20,8 +26,7 @@ const (
 
 // 中断模式
 const (
-	_ = iota
-	intNone
+	intNone = iota
 	intNMI
 	intIRQ
 )
@@ -102,6 +107,41 @@ var opcodeCycles = [256]byte{
 	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0,
 }
 
+var opcodeNames = [256]string{
+	"brk", "ora", "bad", "bad", "bad", "ora", "asl", "bad",
+	"php", "ora", "asl", "bad", "bad", "ora", "asl", "bad",
+	"bpl", "ora", "bad", "bad", "bad", "ora", "asl", "bad",
+	"clc", "ora", "bad", "bad", "bad", "ora", "asl", "bad",
+	"jsr", "and", "bad", "bad", "bit", "and", "rol", "bad",
+	"plp", "and", "rol", "bad", "bit", "and", "rol", "bad",
+	"bmi", "and", "bad", "bad", "bad", "and", "rol", "bad",
+	"sec", "and", "bad", "bad", "bad", "and", "rol", "bad",
+	"rti", "eor", "bad", "bad", "bad", "eor", "lsr", "bad",
+	"pha", "eor", "lsr", "bad", "jmp", "eor", "lsr", "bad",
+	"bvc", "eor", "bad", "bad", "bad", "eor", "lsr", "bad",
+	"cli", "eor", "bad", "bad", "bad", "eor", "lsr", "bad",
+	"rts", "adc", "bad", "bad", "bad", "adc", "ror", "bad",
+	"pla", "adc", "ror", "bad", "jmp", "adc", "ror", "bad",
+	"bvs", "adc", "bad", "bad", "bad", "adc", "ror", "bad",
+	"sei", "adc", "bad", "bad", "bad", "adc", "ror", "bad",
+	"bad", "sta", "bad", "bad", "sty", "sta", "stx", "bad",
+	"dey", "bad", "txa", "bad", "sty", "sta", "stx", "bad",
+	"bcc", "sta", "bad", "bad", "sty", "sta", "stx", "bad",
+	"tya", "sta", "txs", "bad", "bad", "sta", "bad", "bad",
+	"ldy", "lda", "ldx", "bad", "ldy", "lda", "ldx", "bad",
+	"tay", "lda", "tax", "bad", "ldy", "lda", "ldx", "bad",
+	"bcs", "lda", "bad", "bad", "ldy", "lda", "ldx", "bad",
+	"clv", "lda", "tsx", "bad", "ldy", "lda", "ldx", "bad",
+	"cpy", "cmp", "bad", "bad", "cpy", "cmp", "dec", "bad",
+	"iny", "cmp", "dex", "bad", "cpy", "cmp", "dec", "bad",
+	"bne", "cmp", "bad", "bad", "bad", "cmp", "dec", "bad",
+	"cld", "cmp", "bad", "bad", "bad", "cmp", "dec", "bad",
+	"cpx", "sbc", "bad", "bad", "cpx", "sbc", "inc", "bad",
+	"inx", "sbc", "nop", "bad", "cpx", "sbc", "inc", "bad",
+	"beq", "sbc", "bad", "bad", "bad", "sbc", "inc", "bad",
+	"sed", "sbc", "bad", "bad", "bad", "sbc", "inc", "bad",
+}
+
 type stepContext struct {
 	a    uint16
 	pc   uint16
@@ -168,20 +208,23 @@ func (o *Flag) SetZN(V byte) {
 }
 
 type CPU struct {
-	A       byte            // 累加寄存器（Accumulator）
-	X       byte            // 索引寄存器（Index Register）
-	Y       byte            // 索引寄存器（Index Register）
-	SP      byte            // 栈指针（Stack Pointer）
-	PC      uint16          // 指令指针
-	Flag                    // 状态寄存器（Status Register）
-	Cycles  uint64          // 指令周期
-	opcodes [256]opCodeFunc // 指令执行函数
-	irq     byte            // 当前中断
+	A                byte            // 累加寄存器（Accumulator）
+	X                byte            // 索引寄存器（Index Register）
+	Y                byte            // 索引寄存器（Index Register）
+	SP               byte            // 栈指针（Stack Pointer）
+	PC               uint16          // 指令指针
+	Flag                             // 状态寄存器（Status Register）
+	Cycles           uint64          // 指令周期
+	opcodes          [256]opCodeFunc // 指令执行函数
+	irq              byte            // 当前中断
+	RAM              [2048]byte      // CPU RAM
+	MemoryReadWriter                 // 内存读写实现
 }
 
-func NewCPU() *CPU {
+func NewCPU(console *Console) *CPU {
 	cpu := &CPU{}
 	cpu.createOpcodeFuncs()
+	cpu.MemoryReadWriter = NewCPUMemory(console)
 	return cpu
 }
 
@@ -189,6 +232,95 @@ func (o *CPU) Reset() {
 	o.PC = o.Read16(0xFFFC)
 	o.SP = 0xFD
 	o.SetFlags(0x24)
+}
+
+func (o *CPU) PrintInstruction(opcode byte, pc uint16) {
+	bytes := opcodeSizes[opcode]
+	name := opcodeNames[opcode]
+	w0 := fmt.Sprintf("%02X", o.Read(pc+0))
+	w1 := fmt.Sprintf("%02X", o.Read(pc+1))
+	w2 := fmt.Sprintf("%02X", o.Read(pc+2))
+	if bytes < 2 {
+		w1 = "  "
+	}
+	if bytes < 3 {
+		w2 = "  "
+	}
+	fmt.Printf(
+		"%4X  %s %s %s  %s %8s"+
+			"A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d\n",
+		o.PC, w0, w1, w2, name, "",
+		o.A, o.X, o.Y, o.GetFlags(), o.SP, (o.Cycles*3)%341)
+}
+
+func (o *CPU) Step() int {
+	cycles := o.Cycles
+
+	switch o.irq {
+	case intNMI:
+		o.nmiSvc()
+	case intIRQ:
+		o.irqSvc()
+	}
+
+	o.irq = intNone
+
+	opcode := o.Read(o.PC)
+	mode := opcodeModes[opcode]
+	var A uint16
+	var paged bool
+
+	switch mode {
+	case amAbsolute:
+		A = o.Read16(o.PC + 1)
+	case amAbsoluteX:
+		A = o.Read16(o.PC+1) + uint16(o.X)
+		paged = pagesDiffer(A-uint16(o.X), A)
+	case amAbsoluteY:
+		A = o.Read16(o.PC+1) + uint16(o.Y)
+		paged = pagesDiffer(A-uint16(o.Y), A)
+	case amAccumulator:
+		A = 0
+	case amImmediate:
+		A = o.PC + 1
+	case amImplied:
+		A = 0
+	case amIndexedIndirect:
+		A = o.Read16Bug(uint16(o.Read(o.PC+1) + o.X))
+	case amIndirect:
+		A = o.Read16Bug(o.Read16(o.PC + 1))
+	case amIndirectIndexed:
+		A = o.Read16Bug(uint16(o.Read(o.PC+1))) + uint16(o.Y)
+		paged = pagesDiffer(A-uint16(o.Y), A)
+	case amRelative:
+		offset := uint16(o.Read(o.PC + 1))
+		if offset < 0x80 {
+			A = o.PC + 2 + offset
+		} else {
+			A = o.PC + 2 + offset - 0x100
+		}
+	case amZero:
+		A = uint16(o.Read(o.PC + 1))
+	case amZeroX:
+		A = uint16(o.Read(o.PC+1)+o.X) & 0xFF
+	case amZeroY:
+		A = uint16(o.Read(o.PC+1)+o.Y) & 0xFF
+	}
+
+	pcback := o.PC
+
+	o.PC += uint16(opcodeSizes[opcode])
+	o.Cycles += uint64(opcodeCycles[opcode])
+	if paged {
+		o.Cycles += uint64(opcodePagedSize[opcode])
+	}
+
+	ctx := &stepContext{A, o.PC, mode}
+	o.opcodes[opcode](ctx)
+
+	o.PrintInstruction(opcode, pcback)
+
+	return int(o.Cycles - cycles)
 }
 
 func pagesDiffer(a, b uint16) bool {
@@ -217,12 +349,12 @@ func (o *CPU) Read16(A uint16) uint16 {
 	return hi<<8 | lo
 }
 
-func (o *CPU) Read(A uint16) byte {
-	return 0
-}
-
-func (o *CPU) Write(A uint16, V byte) {
-
+func (o *CPU) Read16Bug(A uint16) uint16 {
+	a := A
+	b := (a & 0xFF00) | uint16(byte(a)+1)
+	lo := o.Read(a)
+	hi := o.Read(b)
+	return uint16(hi)<<8 | uint16(lo)
 }
 
 func (o *CPU) push(v byte) {
