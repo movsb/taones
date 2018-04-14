@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 )
 
 // 寻址模式（Addressing Modes）
@@ -231,12 +232,19 @@ func main() {
 	sizeStr := ""
 	pageStr := ""
 	cycleStr := ""
+	nameStr := ""
 
 	for i, opc := range opcTable256 {
 		modeStr += fmt.Sprintf("%d,", opc.mode)
 		sizeStr += fmt.Sprintf("%d,", opc.size)
 		pageStr += fmt.Sprintf("%d,", opc.paged)
 		cycleStr += fmt.Sprintf("%d,", opc.cycles)
+		name := strings.ToLower(opc.name)
+		if name == "" {
+			name = "bad"
+		}
+
+		nameStr += fmt.Sprintf("o.%s, ", name)
 
 		if (i+1)%16 == 0 {
 			modeStr += "\n"
@@ -244,9 +252,12 @@ func main() {
 			pageStr += "\n"
 			cycleStr += "\n"
 		}
+		if (i+1)%8 == 0 {
+			nameStr += "\n"
+		}
 	}
 
-	fmt.Printf("modeString:\n%s\n\nsizeStr:\n%s\n\npageStr:\n%s\n\ncycleStr:\n%s\n\n",
-		modeStr, sizeStr, pageStr, cycleStr,
+	fmt.Printf("modeString:\n%s\n\nsizeStr:\n%s\n\npageStr:\n%s\n\ncycleStr:\n%s\n\nnameStr:\n%s\n\n",
+		modeStr, sizeStr, pageStr, cycleStr, nameStr,
 	)
 }
