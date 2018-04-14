@@ -2,6 +2,7 @@ package main
 
 type Console struct {
 	cpu    *CPU
+	ppu    *PPU
 	cart   *Cartridge
 	mapper Mapper
 }
@@ -9,6 +10,7 @@ type Console struct {
 func NewConsole() *Console {
 	console := &Console{}
 	console.cpu = NewCPU(console)
+	console.ppu = NewPPU(console)
 	return console
 }
 
