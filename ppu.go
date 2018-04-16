@@ -61,6 +61,16 @@ func (o *PPUSTAT) Set(v byte) {
 	o.statVBlank = v >> 7 & 1
 }
 
+func (o *PPUSTAT) Get(nmiOccurred bool) byte {
+	var v byte
+	v |= o.statSpriteOverflow << 5
+	v |= o.statSpriteHit << 6
+	if nmiOccurred {
+		v |= o.statVBlank
+	}
+	return v
+}
+
 // 精灵地址 $2003
 type OAMADDR byte
 
@@ -83,8 +93,15 @@ type PPU struct {
 	MemoryReadWriter
 	console *Console
 
-	Cycle      int // [0,340]
-	Scanline   int // [0,261]
+	// 扫描一条扫描线时的扫描周期数
+	// NTSC 一条扫描线是 341 个周期
+	Cycle int // [0,340]
+
+	// 一帧的扫描线数
+	// NTSC 是 262 条
+	// 所以总扫描周期是：341*262 = 89342
+	Scanline int // [0,261]
+
 	FrameCount uint64
 
 	palette   [32]byte
@@ -104,11 +121,31 @@ type PPU struct {
 	PPUDATA
 	OAMDMAR
 
-	oddFrame bool // 奇偶帧标志
+	// 内部奇偶帧标志位
+	// 每完成一帧，切换一次
+	// 不论是否开启渲染，都会切换
+	// 奇帧比偶帧少一个周期
+	oddFrame bool
 
 	nmiOccurred bool // 中断标志：进入 VBlank
 	// 功能同 ctrlEnableNMI
 	// nmiOutput bool // 开启中断输出
+
+	// 当前 VRAM 地址，15位
+	// yyy NN YYYYY XXXXX
+	// ||| || ||||| +++++-- 粗糙 X 滚动（Tile 列）
+	// ||| || +++++-------- 粗糙 Y 滚动（Tile 行）
+	// ||| ++-------------- 命名表选择（2位，4个表）
+	// +++----------------- 精确 Y 滚动（Tile 级别）
+	v uint16
+	// 临时 VRAM 地址，15位
+	// 即：当前可见屏幕区域最左上角的Tile的地址
+	t uint16
+	// 精确 X 滚动，3位
+	// [0,7] Tile 内的像素点列
+	x byte
+	// 第1次/第2次写切换
+	w bool
 }
 
 func NewPPU(console *Console) *PPU {
@@ -123,4 +160,64 @@ func (o *PPU) Power() {
 	o.PPUCTRL.Set(0x00)
 	o.PPUMASK.Set(0x00)
 	o.PPUSTAT.Set(0xA0)
+}
+
+// 写 $2000
+func (o *PPU) writeControl(v byte) {
+	o.PPUCTRL.Set(v)
+	// PPU_scrolling
+	// t: ...BA.. ........ = d: ......BA
+	o.t = o.t&0x73FF | uint16(v)&0x0003<<10
+}
+
+// 读 $2002
+func (o *PPU) readStatus() byte {
+	v := o.PPUSTAT.Get(o.nmiOccurred)
+
+	// PPU_scrolling
+	// w:                  = 0
+	o.w = false
+
+	return v
+}
+
+// 写 $2005 PPU_scrolling
+// 第1次写 (w is 0)
+// t: ....... ...HGFED = d: HGFED...
+// x:              CBA = d: .....CBA
+// w:                  = 1
+// 第2次写 (w is 1)
+// t: CBA..HG FED..... = d: HGFEDCBA
+// w:                  = 0
+func (o *PPU) writeScroll(d byte) {
+	dd := uint16(d)
+
+	if !o.w {
+		o.t = o.t&0xFFE0 | dd>>3
+		o.x = d & 7
+	} else {
+		o.t = o.t&0x8C1F | (dd&7)<<12 | (dd&0xF8)<<2
+	}
+	o.w = !o.w
+}
+
+// 写 $2006 PPU_scrolling
+// 第1次写 (w is 0)
+// t: .FEDCBA ........ = d: ..FEDCBA
+// t: X...... ........ = 0
+// w:                  = 1
+// 第2次写(w is 1)
+// t: ....... HGFEDCBA = d: HGFEDCBA
+// v                   = t
+// w:                  = 0
+func (o *PPU) writeAddress(d byte) {
+	dd := uint16(d)
+
+	if !o.w {
+		o.t = o.t&0x00FF | (dd&0x3F)<<8
+	} else {
+		o.t = o.t&0x7F00 | dd
+		o.v = o.t
+	}
+	o.w = !o.w
 }
