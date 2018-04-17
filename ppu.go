@@ -93,17 +93,6 @@ type PPU struct {
 	MemoryReadWriter
 	console *Console
 
-	// 扫描一条扫描线时的扫描周期数
-	// NTSC 一条扫描线是 341 个周期
-	Cycle int // [0,340]
-
-	// 一帧的扫描线数
-	// NTSC 是 262 条
-	// 所以总扫描周期是：341*262 = 89342
-	Scanline int // [0,261]
-
-	FrameCount uint64
-
 	palette   [32]byte
 	nameTable [2048]byte
 	sprite    [256]byte
@@ -146,6 +135,29 @@ type PPU struct {
 	x byte
 	// 第1次/第2次写切换
 	w bool
+
+	// 扫描一条扫描线时的扫描周期数
+	// NTSC 一条扫描线是 341 个周期
+	Cycle int // [0,340]
+
+	// 一帧的扫描线数
+	// NTSC 是 262 条
+	// 所以总扫描周期是：341*262 = 89342
+	Scanline int // [0,261]
+
+	// 帧计数器
+	FrameCount uint64
+
+	// 渲染临时数据
+	// 两个 Tiles 的位图数据
+	tileData1          uint16
+	tileData2          uint16
+	palData1           uint8
+	palData2           uint8
+	nameTableByte      byte
+	attributeTableByte byte
+	bitmapLo           byte
+	bitmapHi           byte
 }
 
 func NewPPU(console *Console) *PPU {
@@ -258,4 +270,76 @@ func (o *PPU) incY() {
 		// 把新的扫描行号写回vram地址
 		o.v = o.v&^0x03E0 | r<<5
 	}
+}
+
+/* 开始抓数据逻辑 */
+
+// 从当前地址抓取命名表：一个字节
+func (o *PPU) fetchNameTable() {
+	// $2000 - $2FFF
+	a := 0x2000 | o.v&0x0FFF
+	o.nameTableByte = o.Read(a)
+}
+
+// 为当前命名表爬取属性表：一个字节
+/*
+属性表与命名表对应关系：
+
+20 | 00 01 02 03 | 04 05 06 07 | ... | 1C 1D 1E 1F
+20 | 20 21 22 23 |
+20 | 40 41 42 43 |
+20 | 60 61 62 63 |-> 23C0 + 0
+ ... ... ... ...
+23 | 80 81 82 83
+23 | A0 A1 A2 A3 | ..................| BC BD BE BF
+23 | C0 C1 C2 C3
+
+属性表一个字节，代表命名表 4x4 个 图块
+每4行增加8个属性表字节
+
+              7
+2000 0 0 0 0  0 +8个字节
+2080 0 0 0 0  1 +8
+2100 0 0 0 1  0 +8
+2180 0 0 0 1  1 +8
+2200 0 0 1 0  0 +8
+2280 0 0 1 0  1 +8
+2300 0 0 1 1  0 +8
+2380 0 0 1 1  1 +8
+ ...            +8
+2C00 1 1 0 0  0 +8
+ ...            +8
+2F80 1 1 1 1  1 +8
+
+2000
+21
+22
+23 00  -> 23C0 00
+
+24
+25
+26
+27 01 -> 27C0 01
+
+28
+29
+2A
+2B 02 -> 2BC0 10
+
+2C
+2D
+2E
+2F 03 -> 2FC0 11
+
+属性起始地址：由第11、10位决定 0x23C0 | v & 0x0C00
+得到需要属性表偏移：(v >> 7 & 31) * 8 == (v >> 4 & 0xF8)
+v / 4 & 3 得到 [0,7] 范围内的字节
+
+*/
+func (o *PPU) fetchAttributeTableByte() {
+}
+
+// PPU 步进一个周期
+func (o *PPU) Step() {
+
 }
