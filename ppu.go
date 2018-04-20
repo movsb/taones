@@ -150,16 +150,14 @@ type PPU struct {
 
 	// 渲染临时数据
 	// 两个 Tiles 的位图数据
-	tileData1          uint16
-	tileData2          uint16
-	palData1           uint8
-	palData2           uint8
 	nameTableByte      byte
 	attributeTableByte byte
 	tileByteLo         byte
 	tileByteHi         byte
-	bitmapLo           byte
-	bitmapHi           byte
+
+	// 渲染图块所需数据（当前32位+下一个32位）
+	// 一个图块一行8个像素，一个像素4个位，总共32位
+	tileData uint64
 }
 
 func NewPPU(console *Console) *PPU {
@@ -174,6 +172,18 @@ func (o *PPU) Power() {
 	o.PPUCTRL.Set(0x00)
 	o.PPUMASK.Set(0x00)
 	o.PPUSTAT.Set(0xA0)
+
+	o.Cycle = 340
+	o.Scanline = 240
+	o.FrameCount = 0
+}
+
+func (o *PPU) setVBlank() {
+	o.nmiOccurred = true
+}
+
+func (o *PPU) clrVBlank() {
+	o.nmiOccurred = false
 }
 
 // 写 $2000
@@ -367,7 +377,127 @@ func (o *PPU) fetchTileByteHi() {
 	o.tileByteHi = o.Read(a)
 }
 
+// 根据当前 fetch 到的数据
+// 生成一个 tile 的数据
+func (o *PPU) makeTileData() {
+	p3p2 := o.attributeTableByte
+
+	var d uint32
+
+	for i := 0; i < 8; i++ {
+		p0 := o.tileByteLo >> 7 << 0 // 第0位
+		p1 := o.tileByteHi >> 7 << 1 // 第1位
+		o.tileByteLo <<= 1
+		o.tileByteHi <<= 1
+		d <<= 4
+		d |= uint32(p3p2 | p1 | p0)
+	}
+
+	o.tileData |= uint64(d)
+}
+
+func (o *PPU) backgroundPixel() byte {
+	if o.maskShowBackground == 0 {
+		return 0
+	}
+
+	d := o.tileData >> 32 >> ((7 - o.x) * 4)
+	return byte(d & 0x0F)
+}
+
+func (o *PPU) renderPixel() {
+	x := o.Cycle - 1
+	y := o.Scanline
+
+	background := o.backgroundPixel()
+
+	color := background
+
+	c := Palette[o.readPalette(uint16(color))&0x3F]
+	o.back.SetRGBA(x, y, c)
+}
+
+func (o *PPU) copyX() {
+	// hori(v) = hori(t)
+	// v: .....F.. ...EDCBA = t: .....F.. ...EDCBA
+	o.v = (o.v & 0xFBE0) | (o.t & 0x041F)
+}
+
+func (o *PPU) copyY() {
+	// vert(v) = vert(t)
+	// v: .IHGF.ED CBA..... = t: .IHGF.ED CBA.....
+	o.v = (o.v & 0x841F) | (o.t & 0x7BE0)
+}
+
 // PPU 步进一个周期
 func (o *PPU) Step() {
+	if o.Cycle++; o.Cycle > 340 {
+		o.Cycle = 0
+		if o.Scanline++; o.Scanline > 261 {
+			o.Scanline = 0
+			o.FrameCount++
+			o.oddFrame = !o.oddFrame
+		}
+	}
 
+	renderEnabled := o.maskShowBackground != 0 || o.maskShowSprites != 0
+	visibleCycle := o.Cycle >= 1 && o.Cycle <= 256
+	prefetchCycle := o.Cycle >= 321 && o.Cycle <= 336
+	visibleLine := o.Scanline < 240
+	fetchCycle := prefetchCycle || visibleCycle
+	preLine := o.Scanline == 260
+
+	if renderEnabled {
+		if visibleLine && visibleCycle {
+			o.renderPixel()
+		}
+
+		if visibleLine || preLine {
+			// 每个周期渲染一个像素，消耗掉4位
+			o.tileData <<= 4
+			switch o.Cycle & 7 {
+			case 1:
+				o.fetchNameTable()
+			case 3:
+				o.fetchAttributeTableByte()
+			case 5:
+				o.fetchTileByteLo()
+			case 7:
+				o.fetchTileByteHi()
+			case 0:
+				o.makeTileData()
+			}
+		}
+
+		if preLine && o.Cycle >= 280 && o.Cycle <= 304 {
+			o.copyY()
+		}
+
+		if visibleLine || preLine {
+			// 水平移动
+			if fetchCycle && o.Cycle&7 == 0 {
+				o.incX()
+			}
+
+			// 换行
+			if o.Cycle == 256 {
+				o.incY()
+			}
+
+			if o.Cycle == 256 {
+				o.copyX()
+			}
+		}
+	}
+
+	if o.Cycle == 1 {
+		switch o.Scanline {
+		case 241:
+			o.setVBlank()
+		case 261:
+			o.clrVBlank()
+			o.statSpriteHit = 0
+			o.statSpriteOverflow = 0
+		}
+	}
 }
