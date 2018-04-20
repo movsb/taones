@@ -236,6 +236,10 @@ func main() {
 	nameStr := ""
 
 	for i, opc := range opcTable256 {
+		if opc.code == 0 {
+			opc.cycles = 1
+			opc.size = 1
+		}
 		modeStr += fmt.Sprintf("%d,", opc.mode)
 		sizeStr += fmt.Sprintf("%d,", opc.size)
 		pageStr += fmt.Sprintf("%d,", opc.paged)

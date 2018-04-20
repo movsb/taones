@@ -66,7 +66,7 @@ func (o *PPUSTAT) Get(nmiOccurred bool) byte {
 	v |= o.statSpriteOverflow << 5
 	v |= o.statSpriteHit << 6
 	if nmiOccurred {
-		v |= o.statVBlank
+		v |= o.statVBlank << 7
 	}
 	return v
 }
@@ -158,6 +158,9 @@ type PPU struct {
 	// 渲染图块所需数据（当前32位+下一个32位）
 	// 一个图块一行8个像素，一个像素4个位，总共32位
 	tileData uint64
+
+	bufferedData byte
+	register     byte
 }
 
 func NewPPU(console *Console) *PPU {
@@ -166,6 +169,40 @@ func NewPPU(console *Console) *PPU {
 	ppu.back = image.NewRGBA(image.Rect(0, 0, 256, 240))
 	ppu.Power()
 	return &ppu
+}
+
+func (ppu *PPU) readRegister(address uint16) byte {
+	switch address {
+	case 0x2002:
+		return ppu.readStatus()
+	case 0x2004:
+		//return ppu.readOAMData()
+	case 0x2007:
+		//return ppu.readData()
+	}
+	return 0
+}
+
+func (ppu *PPU) writeRegister(address uint16, value byte) {
+	ppu.register = value
+	switch address {
+	case 0x2000:
+		ppu.writeControl(value)
+	case 0x2001:
+		ppu.PPUMASK.Set(value)
+	case 0x2003:
+		//ppu.writeOAMAddress(value)
+	case 0x2004:
+		//ppu.writeOAMData(value)
+	case 0x2005:
+		ppu.writeScroll(value)
+	case 0x2006:
+		ppu.writeAddress(value)
+	case 0x2007:
+		ppu.writeData(value)
+	case 0x4014:
+		//ppu.writeDMA(value)
+	}
 }
 
 func (o *PPU) Power() {
@@ -178,7 +215,37 @@ func (o *PPU) Power() {
 	o.FrameCount = 0
 }
 
+// $2007: PPUDATA (read)
+func (ppu *PPU) readData() byte {
+	value := ppu.Read(ppu.v)
+	// emulate buffered reads
+	if ppu.v%0x4000 < 0x3F00 {
+		buffered := ppu.bufferedData
+		ppu.bufferedData = value
+		value = buffered
+	} else {
+		ppu.bufferedData = ppu.Read(ppu.v - 0x1000)
+	}
+	// increment address
+	if ppu.ctrlIncrement == 0 {
+		ppu.v += 1
+	} else {
+		ppu.v += 32
+	}
+	return value
+}
+
+func (o *PPU) writeData(v byte) {
+	o.Write(o.v, v)
+	if o.ctrlIncrement == 0 {
+		o.v++
+	} else {
+		o.v += 32
+	}
+}
+
 func (o *PPU) setVBlank() {
+	o.front, o.back = o.back, o.front
 	o.nmiOccurred = true
 }
 
@@ -196,11 +263,14 @@ func (o *PPU) writeControl(v byte) {
 
 // 读 $2002
 func (o *PPU) readStatus() byte {
-	v := o.PPUSTAT.Get(o.nmiOccurred)
+	v := o.register & 0x1F
+	v |= o.PPUSTAT.Get(o.nmiOccurred)
 
 	// PPU_scrolling
 	// w:                  = 0
 	o.w = false
+
+	o.nmiOccurred = false
 
 	return v
 }
@@ -431,6 +501,10 @@ func (o *PPU) copyY() {
 
 // PPU 步进一个周期
 func (o *PPU) Step() {
+	if o.nmiOccurred && o.ctrlEnableNMI == 1 {
+		o.console.cpu.triggerNMI()
+	}
+
 	if o.Cycle++; o.Cycle > 340 {
 		o.Cycle = 0
 		if o.Scanline++; o.Scanline > 261 {
