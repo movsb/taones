@@ -198,13 +198,13 @@ var opcodesTable = [...]OpCode{
 	{0xF8, "SED", 1, 2, 0, amImplied},
 	{0x78, "SEI", 1, 2, 0, amImplied},
 
-	{0x85, "STA", 3, 5, 0, amZero},
-	{0x95, "STA", 3, 5, 0, amZeroX},
-	{0x8D, "STA", 3, 5, 0, amAbsolute},
+	{0x85, "STA", 2, 3, 0, amZero},
+	{0x95, "STA", 2, 4, 0, amZeroX},
+	{0x8D, "STA", 3, 4, 0, amAbsolute},
 	{0x9D, "STA", 3, 5, 0, amAbsoluteX},
 	{0x99, "STA", 3, 5, 0, amAbsoluteY},
-	{0x81, "STA", 3, 5, 0, amIndexedIndirect},
-	{0x91, "STA", 3, 5, 0, amIndirectIndexed},
+	{0x81, "STA", 2, 6, 0, amIndexedIndirect},
+	{0x91, "STA", 2, 6, 0, amIndirectIndexed},
 
 	{0x86, "STX", 2, 3, 0, amZero},
 	{0x96, "STX", 2, 4, 0, amZeroY},

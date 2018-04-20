@@ -164,7 +164,7 @@ type PPU struct {
 }
 
 func NewPPU(console *Console) *PPU {
-	ppu := PPU{}
+	ppu := PPU{MemoryReadWriter: NewPPUMemory(console), console: console}
 	ppu.front = image.NewRGBA(image.Rect(0, 0, 256, 240))
 	ppu.back = image.NewRGBA(image.Rect(0, 0, 256, 240))
 	ppu.Power()
