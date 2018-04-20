@@ -156,6 +156,8 @@ type PPU struct {
 	palData2           uint8
 	nameTableByte      byte
 	attributeTableByte byte
+	tileByteLo         byte
+	tileByteHi         byte
 	bitmapLo           byte
 	bitmapHi           byte
 }
@@ -232,6 +234,18 @@ func (o *PPU) writeAddress(d byte) {
 		o.v = o.t
 	}
 	o.w = !o.w
+}
+
+// 读调色板
+func (o *PPU) readPalette(a uint16) byte {
+	a &= 0x1F
+	return o.palette[a]
+}
+
+// 写调色板
+func (o *PPU) writePalette(a uint16, v byte) {
+	a &= 0x1F
+	o.palette[a] = v & 0x3F
 }
 
 // PPU 显存 X 坐标写入增加
@@ -333,6 +347,24 @@ func (o *PPU) fetchAttributeTableByte() {
 	)
 
 	o.attributeTableByte = attr >> start & 3 << 2
+}
+
+// 抓取图块第0面数据
+func (o *PPU) fetchTileByteLo() {
+	fineY := o.v >> 12 & 7
+	patternTable := uint16(o.ctrlBackgroundTable) * 0x1000
+	tile := o.nameTableByte
+	a := patternTable + uint16(tile) + fineY
+	o.tileByteLo = o.Read(a)
+}
+
+// 抓取图块第1面数据
+func (o *PPU) fetchTileByteHi() {
+	fineY := o.v >> 12 & 7
+	patternTable := uint16(o.ctrlBackgroundTable) * 0x1000
+	tile := o.nameTableByte
+	a := patternTable + uint16(tile) + fineY + 8
+	o.tileByteHi = o.Read(a)
 }
 
 // PPU 步进一个周期
