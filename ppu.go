@@ -118,8 +118,8 @@ type PPU struct {
 	oddFrame bool
 
 	nmiOccurred bool // 中断标志：进入 VBlank
-	// 功能同 ctrlEnableNMI
-	// nmiOutput bool // 开启中断输出
+	nmiPrevious bool
+	nmiDelay    byte
 
 	// 当前 VRAM 地址，15位
 	// yyy NN YYYYY XXXXX
@@ -219,7 +219,7 @@ func (ppu *PPU) writeRegister(address uint16, value byte) {
 func (o *PPU) Power() {
 	o.PPUCTRL.Set(0x00)
 	o.PPUMASK.Set(0x00)
-	o.PPUSTAT.Set(0xA0)
+	o.PPUSTAT.Set(0xA0) // TODO ???
 
 	o.Cycle = 340
 	o.Scanline = 240
@@ -285,15 +285,18 @@ func (o *PPU) writeDMA(v byte) {
 func (o *PPU) setVBlank() {
 	o.front, o.back = o.back, o.front
 	o.nmiOccurred = true
+	o.nmiChange()
 }
 
 func (o *PPU) clrVBlank() {
 	o.nmiOccurred = false
+	o.nmiChange()
 }
 
 // 写 $2000
 func (o *PPU) writeControl(v byte) {
 	o.PPUCTRL.Set(v)
+	// TODO nmiOutput
 	// PPU_scrolling
 	// t: ...BA.. ........ = d: ......BA
 	o.t = o.t&0x73FF | uint16(v)&0x0003<<10
@@ -309,8 +312,18 @@ func (o *PPU) readStatus() byte {
 	o.w = false
 
 	o.nmiOccurred = false
+	o.nmiChange()
 
 	return v
+}
+
+func (o *PPU) nmiChange() {
+	// TODO ???
+	nmi := o.ctrlEnableNMI == 1 && o.nmiOccurred
+	if nmi && !o.nmiPrevious {
+		o.nmiDelay = 15
+	}
+	o.nmiPrevious = nmi
 }
 
 // 写 $2005 PPU_scrolling
@@ -328,6 +341,7 @@ func (o *PPU) writeScroll(d byte) {
 		o.t = o.t&0xFFE0 | dd>>3
 		o.x = d & 7
 	} else {
+		// TODO
 		o.t = o.t&0x8C1F | (dd&7)<<12 | (dd&0xF8)<<2
 	}
 	o.w = !o.w
@@ -346,6 +360,7 @@ func (o *PPU) writeAddress(d byte) {
 	dd := uint16(d)
 
 	if !o.w {
+		// TODO 80FF
 		o.t = o.t&0x00FF | (dd&0x3F)<<8
 	} else {
 		o.t = o.t&0x7F00 | dd
@@ -356,13 +371,19 @@ func (o *PPU) writeAddress(d byte) {
 
 // 读调色板
 func (o *PPU) readPalette(a uint16) byte {
-	a &= 0x1F
+	// TODO ???
+	if a >= 16 && a&3 == 0 {
+		a -= 16
+	}
 	return o.palette[a]
 }
 
 // 写调色板
 func (o *PPU) writePalette(a uint16, v byte) {
-	a &= 0x1F
+	// TODO ???
+	if a >= 16 && a&3 == 0 {
+		a -= 16
+	}
 	o.palette[a] = v & 0x3F
 }
 
@@ -396,6 +417,8 @@ func (o *PPU) incY() {
 		if r == 29 { // [0,29]，29是最后一行显示行
 			r = 0         // 回到第0行
 			o.v ^= 0x0800 // 切换垂直命名表
+		} else if r == 31 {
+			r = 0
 		} else {
 			r++ // TODO 没有处理 r > 29 的情况
 		}
@@ -589,8 +612,12 @@ func (o *PPU) copyY() {
 }
 
 func (o *PPU) tick() {
-	if o.nmiOccurred && o.ctrlEnableNMI == 1 {
-		o.console.cpu.triggerNMI()
+	// TODO
+	if o.nmiDelay > 0 {
+		o.nmiDelay--
+		if o.nmiDelay == 0 && o.ctrlEnableNMI == 1 && o.nmiOccurred {
+			o.console.cpu.triggerNMI()
+		}
 	}
 
 	if o.maskShowBackground != 0 || o.maskShowSprites != 0 {
@@ -693,8 +720,8 @@ func (o *PPU) fetchSpritePattern(i int, row int) uint32 {
 			lo >>= 1
 			hi >>= 1
 		} else {
-			p0 = lo & 0x80 >> 7 << 0
-			p1 = lo & 0x80 >> 7 << 1
+			p0 = lo & 0x80 >> 7
+			p1 = hi & 0x80 >> 6
 			lo <<= 1
 			hi <<= 1
 		}

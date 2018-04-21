@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-const cpuFreq = 1789773 / 1.5
+const cpuFreq = 1789773
 
 // 寻址模式（Addressing Modes）
 const (
