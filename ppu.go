@@ -485,13 +485,64 @@ func (o *PPU) backgroundPixel() byte {
 	return byte(d & 0x0F)
 }
 
+func (o *PPU) spritePixel() (byte, byte) {
+	if o.maskShowSprites == 0 {
+		return 0, 0
+	}
+
+	for i := 0; i < o.spriteCount; i++ {
+		offset := o.Cycle - 1 - int(o.spritePositions[i])
+		if offset < 0 || offset > 7 {
+			continue
+		}
+		offset = 7 - offset
+		color := byte(o.spritePatterns[i] >> byte(offset*4) & 0x0F)
+		if color&3 == 0 {
+			continue
+		}
+		return byte(i), color
+	}
+
+	return 0, 0
+}
+
 func (o *PPU) renderPixel() {
 	x := o.Cycle - 1
 	y := o.Scanline
 
 	background := o.backgroundPixel()
+	i, sprite := o.spritePixel()
 
-	color := background
+	if x < 8 && o.maskShowLeftBackground == 0 {
+		background = 0
+	}
+
+	if x < 8 && o.maskShowLeftSprites == 0 {
+		sprite = 0
+	}
+
+	b := background&3 != 0
+	s := sprite&3 != 0
+
+	var color byte
+
+	switch {
+	case b && s:
+		if o.spriteIndexes[i] == 0 && x < 255 {
+			o.statSpriteHit = 1
+		}
+		if o.spritePriorites[i] == 0 {
+			color = sprite | 0x10
+		} else {
+			color = background
+		}
+	case b:
+		color = background
+	case s:
+		color = sprite | 0x10
+	default:
+		color = 0
+	}
 
 	c := Palette[o.readPalette(uint16(color))&0x3F]
 	o.back.SetRGBA(x, y, c)
