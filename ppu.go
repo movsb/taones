@@ -182,6 +182,8 @@ func (ppu *PPU) readRegister(address uint16) byte {
 	switch address {
 	case 0x2002:
 		return ppu.readStatus()
+	case 0x2004:
+		return ppu.readOAMData()
 	case 0x2007:
 		return ppu.readData()
 	default:
@@ -198,10 +200,9 @@ func (ppu *PPU) writeRegister(address uint16, value byte) {
 	case 0x2001:
 		ppu.PPUMASK.Set(value)
 	case 0x2003:
-		//ppu.writeOAMAddress(value)
+		ppu.writeOAMAddress(value)
 	case 0x2004:
-		//ppu.writeOAMData(value)
-		break
+		ppu.writeOAMData(value)
 	case 0x2005:
 		ppu.writeScroll(value)
 	case 0x2006:
@@ -209,7 +210,7 @@ func (ppu *PPU) writeRegister(address uint16, value byte) {
 	case 0x2007:
 		ppu.writeData(value)
 	case 0x4014:
-		//ppu.writeDMA(value)
+		ppu.writeDMA(value)
 	default:
 		log.Fatalf("error write ppu register: %x=%x\n", address, value)
 	}
@@ -251,6 +252,33 @@ func (o *PPU) writeData(v byte) {
 		o.v++
 	} else {
 		o.v += 32
+	}
+}
+
+func (o *PPU) writeOAMAddress(v byte) {
+	o.OAMADDR = OAMADDR(v)
+}
+
+func (o *PPU) readOAMData() byte {
+	return o.oam[o.OAMADDR]
+}
+
+func (o *PPU) writeOAMData(v byte) {
+	o.oam[o.OAMADDR] = v
+	o.OAMADDR++
+}
+
+func (o *PPU) writeDMA(v byte) {
+	cpu := o.console.cpu
+	addr := uint16(v) << 8
+	for i := 0; i < 256; i++ {
+		o.oam[o.OAMADDR] = cpu.Read(addr)
+		o.OAMADDR++
+		addr++
+	}
+	cpu.suspendCycles += 513
+	if cpu.Cycles&1 != 0 {
+		cpu.suspendCycles++
 	}
 }
 

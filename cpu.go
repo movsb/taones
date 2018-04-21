@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-const cpuFreq = 1789773
+const cpuFreq = 1789773 / 1.5
 
 // 寻址模式（Addressing Modes）
 const (
@@ -219,6 +219,7 @@ type CPU struct {
 	irq              byte            // 当前中断
 	RAM              [2048]byte      // CPU RAM
 	MemoryReadWriter                 // 内存读写实现
+	suspendCycles    uint32          // 暂时执行的周期数（比如DMA发生时）
 }
 
 func NewCPU(console *Console) *CPU {
@@ -249,12 +250,17 @@ func (o *CPU) PrintInstruction(opcode byte, pc uint16) {
 	}
 	fmt.Printf(
 		"%4X  %s %s %s  %s %8s"+
-			"A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d\n",
+			"A:%02X X:%02X Y:%02X P:%02X SP:%02X\n",
 		o.PC, w0, w1, w2, name, "",
-		o.A, o.X, o.Y, o.GetFlags(), o.SP, (o.Cycles*3)%341)
+		o.A, o.X, o.Y, o.GetFlags(), o.SP)
 }
 
 func (o *CPU) Step() int {
+	if o.suspendCycles > 0 {
+		o.suspendCycles--
+		return 1
+	}
+
 	cycles := o.Cycles
 
 	switch o.irq {
@@ -447,6 +453,7 @@ func (o *CPU) createOpcodeFuncs() {
 
 func (o *CPU) bad(c *stepContext) {
 	//panic(c)
+	c.a = c.pc
 }
 
 // A,Z,C,N = A+M+C
