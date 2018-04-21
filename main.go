@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"image"
 	"log"
 	"runtime"
@@ -8,6 +9,10 @@ import (
 	"github.com/go-gl/gl/v2.1/gl"
 	"github.com/go-gl/glfw/v3.1/glfw"
 )
+
+var config struct {
+	opcodes bool
+}
 
 func init() {
 	// we need a parallel OS thread to avoid audio stuttering
@@ -62,6 +67,9 @@ func drawBuffer(window *glfw.Window) {
 }
 
 func main() {
+	flag.BoolVar(&config.opcodes, "opcodes", false, "show opcodes")
+	flag.Parse()
+
 	var err error
 	if err = glfw.Init(); err != nil {
 		panic(err)

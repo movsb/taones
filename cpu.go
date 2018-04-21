@@ -247,8 +247,8 @@ func init() {
 
 	for i, opc := range opcTable256 {
 		if opc.name == "" {
-			opc.code = byte(i)
-			opc.cycles = 1
+			opc.code = 0xEA // nop
+			opc.cycles = 2
 			opc.size = 1
 			opc.mode = amImplied
 			opc.name = "---"
@@ -356,7 +356,6 @@ func (o *CPU) Reset() {
 }
 
 func (o *CPU) PrintInstruction(opcode byte, pc uint16) {
-	return
 	bytes := opcodeSizes[opcode]
 	name := opcodeNames[opcode]
 	w0 := fmt.Sprintf("%02X", o.Read(pc+0))
@@ -391,10 +390,6 @@ func (o *CPU) Step() int {
 	}
 
 	o.irq = intNone
-
-	if o.PC == 0x90CE {
-		o.PC = o.PC
-	}
 
 	opcode := o.Read(o.PC)
 	mode := opcodeModes[opcode]
@@ -449,7 +444,9 @@ func (o *CPU) Step() int {
 	ctx := &stepContext{A, o.PC, mode}
 	o.opcodes[opcode](ctx)
 
-	o.PrintInstruction(opcode, pcback)
+	if config.opcodes {
+		o.PrintInstruction(opcode, pcback)
+	}
 
 	return int(o.Cycles - cycles)
 }
@@ -523,6 +520,7 @@ func (o *CPU) nmiSvc() {
 	o.push16(o.PC)
 	o.php(nil)
 	o.PC = o.Read16(0xFFFA)
+	o.I = 1
 	o.Cycles += 7
 }
 
@@ -539,7 +537,7 @@ func (o *CPU) createOpcodeFuncs() {
 		o.brk, o.ora, o.bad, o.bad, o.bad, o.ora, o.asl, o.bad,
 		o.php, o.ora, o.asl, o.bad, o.bad, o.ora, o.asl, o.bad,
 		o.bpl, o.ora, o.bad, o.bad, o.bad, o.ora, o.asl, o.bad,
-		o.clc, o.ora, o.bad, o.bad, o.bad, o.ora, o.asl, o.bad,
+		o.clc, o.ora, o.nop, o.bad, o.nop, o.ora, o.asl, o.bad,
 		o.jsr, o.and, o.bad, o.bad, o.bit, o.and, o.rol, o.bad,
 		o.plp, o.and, o.rol, o.bad, o.bit, o.and, o.rol, o.bad,
 		o.bmi, o.and, o.bad, o.bad, o.bad, o.and, o.rol, o.bad,
@@ -572,8 +570,7 @@ func (o *CPU) createOpcodeFuncs() {
 }
 
 func (o *CPU) bad(c *stepContext) {
-	//panic(c)
-	c.a = c.pc
+	//log.Fatalf("%+v\n", c)
 }
 
 // A,Z,C,N = A+M+C
