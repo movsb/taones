@@ -96,7 +96,7 @@ type PPU struct {
 
 	palette   [32]byte
 	nameTable [2048]byte
-	sprite    [256]byte
+	oam       [256]byte
 	front     *image.RGBA
 	back      *image.RGBA
 
@@ -162,6 +162,12 @@ type PPU struct {
 
 	bufferedData byte
 	register     byte
+
+	spriteCount     int
+	spritePatterns  [8]uint32
+	spritePositions [8]byte
+	spritePriorites [8]byte
+	spriteIndexes   [8]byte
 }
 
 func NewPPU(console *Console) *PPU {
@@ -528,6 +534,99 @@ func (o *PPU) tick() {
 	}
 }
 
+// 精灵评估与精灵渲染是两个独立的过程
+// 所以此处一次性搞定精灵评估操作
+// 而没有按照周期一步一步来
+func (o *PPU) evaluateSprites() {
+	var h = 8
+	if o.ctrlSpriteSize == 1 {
+		h = 16
+	}
+
+	count := 0
+
+	for i := 0; i < 64; i++ {
+		y := o.oam[i*4+0]
+		a := o.oam[i*4+2]
+		x := o.oam[i*4+3]
+
+		r := o.Scanline - int(y)
+		if r < 0 || r >= h {
+			continue
+		}
+
+		if count < 8 {
+			o.spritePatterns[count] = o.fetchSpritePattern(i, r)
+			o.spritePositions[count] = x
+			o.spritePriorites[count] = a >> 5 & 1
+			o.spriteIndexes[count] = byte(i)
+		}
+		count++
+	}
+	if count > 8 {
+		count = 8
+		o.statSpriteOverflow = 1
+	}
+	o.spriteCount = count
+}
+
+// 获取第i个精灵第row条扫描线的渲染数据
+func (o *PPU) fetchSpritePattern(i int, row int) uint32 {
+	tile := o.oam[i*4+1]
+	attr := o.oam[i*4+2]
+
+	var addr uint16
+
+	if o.ctrlSpriteSize == 0 { // 8x8
+		// 如果垂直翻转
+		if attr&0x80 == 0x80 {
+			row = 7 - row
+		}
+		table := 0x1000 * uint16(o.ctrlSpriteTable)
+		addr = table + uint16(tile)*16 + uint16(row)
+	} else { // 8x16
+		// 如果垂直翻转翻转
+		if attr&0x80 == 0x80 {
+			row = 15 - row
+		}
+		// 第0位决定使用的图案表
+		table := 0x1000 * uint16(tile&1)
+
+		tile &= 0xFE
+		if row > 7 {
+			tile++
+			row -= 8
+		}
+
+		addr = table + uint16(tile)*16 + uint16(row)
+	}
+
+	lo := o.Read(addr)
+	hi := o.Read(addr + 8)
+	p3p2 := attr & 3 << 2
+	var data uint32
+
+	for i := 0; i < 8; i++ {
+		var p1, p0 byte
+		if attr&0x40 == 0x40 { // 水平翻转
+			p0 = lo & 1 << 0
+			p1 = hi & 1 << 1
+			lo >>= 1
+			hi >>= 1
+		} else {
+			p0 = lo & 0x80 >> 7 << 0
+			p1 = lo & 0x80 >> 7 << 1
+			lo <<= 1
+			hi <<= 1
+		}
+
+		data <<= 4
+		data |= uint32(p3p2 | p1 | p0)
+	}
+
+	return data
+}
+
 // PPU 步进一个周期
 func (o *PPU) Step() {
 	o.tick()
@@ -579,6 +678,14 @@ func (o *PPU) Step() {
 			if o.Cycle == 257 {
 				o.copyX()
 			}
+		}
+	}
+
+	if renderEnabled && o.Cycle == 257 {
+		if visibleLine {
+			o.evaluateSprites()
+		} else {
+			o.spriteCount = 0
 		}
 	}
 
