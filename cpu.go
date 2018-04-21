@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-const cpuFreq = 10000 //1789773
+const cpuFreq = 1789773
 
 // 寻址模式（Addressing Modes）
 const (
@@ -235,6 +235,7 @@ func (o *CPU) Reset() {
 }
 
 func (o *CPU) PrintInstruction(opcode byte, pc uint16) {
+	return
 	bytes := opcodeSizes[opcode]
 	name := opcodeNames[opcode]
 	w0 := fmt.Sprintf("%02X", o.Read(pc+0))

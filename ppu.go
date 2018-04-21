@@ -2,6 +2,7 @@ package main
 
 import (
 	"image"
+	"log"
 )
 
 // PPU 控制寄存器 $2000
@@ -175,10 +176,10 @@ func (ppu *PPU) readRegister(address uint16) byte {
 	switch address {
 	case 0x2002:
 		return ppu.readStatus()
-	case 0x2004:
-		//return ppu.readOAMData()
 	case 0x2007:
-		//return ppu.readData()
+		return ppu.readData()
+	default:
+		log.Fatalln("err reading ppu register", address)
 	}
 	return 0
 }
@@ -194,6 +195,7 @@ func (ppu *PPU) writeRegister(address uint16, value byte) {
 		//ppu.writeOAMAddress(value)
 	case 0x2004:
 		//ppu.writeOAMData(value)
+		break
 	case 0x2005:
 		ppu.writeScroll(value)
 	case 0x2006:
@@ -202,6 +204,8 @@ func (ppu *PPU) writeRegister(address uint16, value byte) {
 		ppu.writeData(value)
 	case 0x4014:
 		//ppu.writeDMA(value)
+	default:
+		log.Fatalf("error write ppu register: %x=%x\n", address, value)
 	}
 }
 
@@ -434,7 +438,7 @@ func (o *PPU) fetchTileByteLo() {
 	fineY := o.v >> 12 & 7
 	patternTable := uint16(o.ctrlBackgroundTable) * 0x1000
 	tile := o.nameTableByte
-	a := patternTable + uint16(tile) + fineY
+	a := patternTable + uint16(tile)*16 + fineY
 	o.tileByteLo = o.Read(a)
 }
 
@@ -443,7 +447,7 @@ func (o *PPU) fetchTileByteHi() {
 	fineY := o.v >> 12 & 7
 	patternTable := uint16(o.ctrlBackgroundTable) * 0x1000
 	tile := o.nameTableByte
-	a := patternTable + uint16(tile) + fineY + 8
+	a := patternTable + uint16(tile)*16 + fineY + 8
 	o.tileByteHi = o.Read(a)
 }
 
@@ -499,10 +503,19 @@ func (o *PPU) copyY() {
 	o.v = (o.v & 0x841F) | (o.t & 0x7BE0)
 }
 
-// PPU 步进一个周期
-func (o *PPU) Step() {
+func (o *PPU) tick() {
 	if o.nmiOccurred && o.ctrlEnableNMI == 1 {
 		o.console.cpu.triggerNMI()
+	}
+
+	if o.maskShowBackground != 0 || o.maskShowSprites != 0 {
+		if o.oddFrame && o.Scanline == 261 && o.Cycle == 339 {
+			o.Cycle = 0
+			o.Scanline = 0
+			o.FrameCount++
+			o.oddFrame = !o.oddFrame
+			return
+		}
 	}
 
 	if o.Cycle++; o.Cycle > 340 {
@@ -513,20 +526,25 @@ func (o *PPU) Step() {
 			o.oddFrame = !o.oddFrame
 		}
 	}
+}
+
+// PPU 步进一个周期
+func (o *PPU) Step() {
+	o.tick()
 
 	renderEnabled := o.maskShowBackground != 0 || o.maskShowSprites != 0
 	visibleCycle := o.Cycle >= 1 && o.Cycle <= 256
 	prefetchCycle := o.Cycle >= 321 && o.Cycle <= 336
 	visibleLine := o.Scanline < 240
 	fetchCycle := prefetchCycle || visibleCycle
-	preLine := o.Scanline == 260
+	preLine := o.Scanline == 261
 
 	if renderEnabled {
 		if visibleLine && visibleCycle {
 			o.renderPixel()
 		}
 
-		if visibleLine || preLine {
+		if (visibleLine || preLine) && fetchCycle {
 			// 每个周期渲染一个像素，消耗掉4位
 			o.tileData <<= 4
 			switch o.Cycle & 7 {
@@ -558,7 +576,7 @@ func (o *PPU) Step() {
 				o.incY()
 			}
 
-			if o.Cycle == 256 {
+			if o.Cycle == 257 {
 				o.copyX()
 			}
 		}
