@@ -8,10 +8,12 @@ import (
 
 var config struct {
 	opcodes bool
+	scale   uint
 }
 
 func main() {
 	flag.BoolVar(&config.opcodes, "opcodes", false, "show opcodes")
+	flag.UintVar(&config.scale, "scale", 2, "video scaler")
 	flag.Parse()
 
 	var err error
@@ -29,7 +31,7 @@ func main() {
 
 	window, err := sdl.CreateWindow("taones",
 		sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED,
-		256, 240, sdl.WINDOW_SHOWN,
+		256*int32(config.scale), 240*int32(config.scale), sdl.WINDOW_SHOWN,
 	)
 
 	if err != nil {
@@ -71,6 +73,9 @@ func main() {
 
 	var lastTime uint32
 
+	var originRect = &sdl.Rect{0, 0, 256, 240}
+	var scaledRect = &sdl.Rect{0, 0, 256 * int32(config.scale), 240 * int32(config.scale)}
+
 	for run := true; run; {
 		switch evt := sdl.PollEvent().(type) {
 		case *sdl.KeyboardEvent:
@@ -111,7 +116,8 @@ func main() {
 
 		console.StepSeconds(float64(diff) / 1000)
 
-		buffer.Blit(nil, surface, nil)
+		buffer.BlitScaled(originRect, surface, scaledRect)
+
 		window.UpdateSurface()
 	}
 }
