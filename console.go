@@ -5,13 +5,19 @@ type Console struct {
 	ppu    *PPU
 	cart   *Cartridge
 	mapper Mapper
+	ctrl1  ControllerProvider
 }
 
 func NewConsole() *Console {
 	console := &Console{}
 	console.cpu = NewCPU(console)
 	console.ppu = NewPPU(console)
+	console.ctrl1 = &EmptyController{}
 	return console
+}
+
+func (o *Console) SetController1(controller ControllerProvider) {
+	o.ctrl1 = controller
 }
 
 func (o *Console) Step() int {

@@ -26,6 +26,7 @@ func (o *CPUMemory) Read(a uint16) byte {
 	case a == 0x4014:
 		return o.console.ppu.readRegister(a)
 	case a == 0x4016:
+		return o.console.ctrl1.Read()
 	case a == 0x4017:
 		break
 	case a >= 0x6000:
@@ -46,6 +47,8 @@ func (o *CPUMemory) Write(a uint16, v byte) {
 		break
 	case a == 0x4014:
 		o.console.ppu.writeRegister(a, v)
+	case a == 0x4016:
+		o.console.ctrl1.Flush()
 	case a < 0x4018:
 		break
 	case a >= 0x6000:

@@ -96,6 +96,27 @@ func main() {
 	cartridge := LoadROM("smb.nes")
 	console.Run(cartridge)
 
+	kbdCtrl1 := NewKeyboardController(func() [8]bool {
+		var keys [8]bool
+
+		read := func(index byte, key glfw.Key) {
+			keys[index] = window.GetKey(key) == glfw.Press
+		}
+
+		read(ButtonA, glfw.KeyK)
+		read(ButtonB, glfw.KeyJ)
+		read(ButtonSelect, glfw.KeyT)
+		read(ButtonStart, glfw.KeyY)
+		read(ButtonUp, glfw.KeyW)
+		read(ButtonDown, glfw.KeyS)
+		read(ButtonLeft, glfw.KeyA)
+		read(ButtonRight, glfw.KeyD)
+
+		return keys
+	})
+
+	console.SetController1(kbdCtrl1)
+
 	texture := createTexture()
 
 	for !window.ShouldClose() {
