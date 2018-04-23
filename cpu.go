@@ -355,22 +355,60 @@ func (o *CPU) Reset() {
 	o.SetFlags(0x24)
 }
 
-func (o *CPU) PrintInstruction(opcode byte, pc uint16) {
-	bytes := opcodeSizes[opcode]
+func (o *CPU) PrintInstruction(pc uint16, A uint16) {
+	opcode := o.Read(pc)
+	size := opcodeSizes[opcode]
 	name := opcodeNames[opcode]
-	w0 := fmt.Sprintf("%02X", o.Read(pc+0))
-	w1 := fmt.Sprintf("%02X", o.Read(pc+1))
-	w2 := fmt.Sprintf("%02X", o.Read(pc+2))
-	if bytes < 2 {
+	mode := opcodeModes[opcode]
+
+	b1 := o.Read(pc + 1)
+	b2 := o.Read(pc + 2)
+
+	w0 := fmt.Sprintf("%02X", opcode)
+	w1 := fmt.Sprintf("%02X", b1)
+	w2 := fmt.Sprintf("%02X", b2)
+
+	if size < 2 {
 		w1 = "  "
 	}
-	if bytes < 3 {
+	if size < 3 {
 		w2 = "  "
 	}
+
+	oprands := ""
+
+	switch mode {
+	case amAbsolute:
+		oprands = fmt.Sprintf("$%04X", A)
+	case amAbsoluteX:
+		oprands = fmt.Sprintf("$%02X%02X,X", b2, b1)
+	case amAbsoluteY:
+		oprands = fmt.Sprintf("$%02X%02X,Y", b2, b1)
+	case amAccumulator:
+		break
+	case amImmediate:
+		oprands = fmt.Sprintf("#$%02X", b1)
+	case amImplied:
+		break
+	case amIndexedIndirect:
+		oprands = fmt.Sprintf("($%02X,X)", b1)
+	case amIndirect:
+		oprands = fmt.Sprintf("($%02X%02X)", b2, b1)
+	case amIndirectIndexed:
+		oprands = fmt.Sprintf("($%02X),Y", b1)
+	case amRelative:
+		oprands = fmt.Sprintf("$%04X", A)
+	case amZero:
+		oprands = fmt.Sprintf("$%02X", A)
+	case amZeroX:
+		oprands = fmt.Sprintf("$%02X,X", b1)
+	case amZeroY:
+		oprands = fmt.Sprintf("$%02X,Y", b1)
+	}
+
 	fmt.Printf(
-		"%4X  %s %s %s  %s %8s"+
-			"A:%02X X:%02X Y:%02X P:%02X SP:%02X\n",
-		o.PC, w0, w1, w2, name, "",
+		"%4X  %s %s %s  %s %-9s  A:%02X X:%02X Y:%02X P:%02X SP:%02X\n",
+		pc, w0, w1, w2, name, oprands,
 		o.A, o.X, o.Y, o.GetFlags(), o.SP)
 }
 
@@ -445,7 +483,7 @@ func (o *CPU) Step() int {
 	o.opcodes[opcode](ctx)
 
 	if config.opcodes {
-		o.PrintInstruction(opcode, pcback)
+		o.PrintInstruction(pcback, A)
 	}
 
 	return int(o.Cycles - cycles)
