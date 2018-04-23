@@ -96,15 +96,19 @@ func main() {
 	cartridge := LoadROM("smb.nes")
 	console.Run(cartridge)
 
-	kbdCtrl1 := NewKeyboardController(func() [8]bool {
+	kbdCtrl1 := NewKeyboardController(func(frameCounter uint64) [8]bool {
 		var keys [8]bool
 
 		read := func(index byte, key glfw.Key) {
-			keys[index] = window.GetKey(key) == glfw.Press
+			keys[index] = keys[index] || window.GetKey(key) == glfw.Press
 		}
 
 		read(ButtonA, glfw.KeyK)
 		read(ButtonB, glfw.KeyJ)
+		if frameCounter&3 == 0 {
+			read(ButtonA, glfw.KeyI)
+			read(ButtonB, glfw.KeyU)
+		}
 		read(ButtonSelect, glfw.KeyT)
 		read(ButtonStart, glfw.KeyY)
 		read(ButtonUp, glfw.KeyW)

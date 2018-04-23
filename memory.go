@@ -48,7 +48,7 @@ func (o *CPUMemory) Write(a uint16, v byte) {
 	case a == 0x4014:
 		o.console.ppu.writeRegister(a, v)
 	case a == 0x4016:
-		o.console.ctrl1.Flush()
+		o.console.ctrl1.Flush(o.console.ppu.FrameCount)
 	case a < 0x4018:
 		break
 	case a >= 0x6000:

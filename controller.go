@@ -12,14 +12,14 @@ const (
 )
 
 type ControllerProvider interface {
-	Flush()
+	Flush(frameCounter uint64)
 	Read() byte
 }
 
 type EmptyController struct {
 }
 
-func (o *EmptyController) Flush() {
+func (o *EmptyController) Flush(frameCounter uint64) {
 
 }
 
@@ -30,18 +30,18 @@ func (o *EmptyController) Read() byte {
 type KeyboardController struct {
 	buttons [8]bool
 	index   byte
-	flusher func() [8]bool
+	flusher func(frameCounter uint64) [8]bool
 }
 
-func NewKeyboardController(flusher func() [8]bool) ControllerProvider {
+func NewKeyboardController(flusher func(frameCounter uint64) [8]bool) ControllerProvider {
 	return &KeyboardController{
 		flusher: flusher,
 	}
 }
 
-func (o *KeyboardController) Flush() {
+func (o *KeyboardController) Flush(frameCounter uint64) {
 	if o.flusher != nil {
-		o.buttons = o.flusher()
+		o.buttons = o.flusher(frameCounter)
 	}
 	o.index = 0
 }
