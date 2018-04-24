@@ -84,6 +84,12 @@ func main() {
 
 	window.MakeContextCurrent()
 
+	var focus bool
+
+	window.SetFocusCallback(func(w *glfw.Window, f bool) {
+		focus = f
+	})
+
 	// initialize gl
 	if err := gl.Init(); err != nil {
 		log.Fatalln(err)
@@ -132,7 +138,9 @@ func main() {
 			dt = 0
 		}
 
-		console.StepSeconds(dt)
+		if focus {
+			console.StepSeconds(dt)
+		}
 
 		gl.BindTexture(gl.TEXTURE_2D, texture)
 
