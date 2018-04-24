@@ -45,6 +45,11 @@ func main() {
 		panic(err)
 	}
 
+	buffer, err := sdl.CreateRGBSurface(0, 256, 240, 32, 0, 0, 0, 0)
+	if err != nil {
+		panic(err)
+	}
+
 	var keys [8]bool
 	var turboA, turboB bool
 
@@ -61,17 +66,17 @@ func main() {
 
 	console.SetController1(kbdCtrl1)
 
-	var lastTime uint32
+	bufPixels := buffer.Pixels()
 
-	surface.Lock()
-	pixels := surface.Pixels()
-	console.ppu.SetPixeler(func(x byte, y byte, color uint) {
+	console.ppu.SetPixeler(func(x byte, y byte, c uint) {
 		a := (uint(y)*256 + uint(x)) * 4
-		pixels[a+0] = byte(color >> 0x00 & 0xFF)
-		pixels[a+1] = byte(color >> 0x08 & 0xFF)
-		pixels[a+2] = byte(color >> 0x10 & 0xFF)
-		pixels[a+3] = byte(color >> 0x18 & 0xFF)
+		bufPixels[a+0] = byte(c >> 0)
+		bufPixels[a+1] = byte(c >> 8)
+		bufPixels[a+2] = byte(c >> 16)
+		bufPixels[a+3] = byte(c >> 24)
 	})
+
+	var lastTime uint32
 
 	for run := true; run; {
 		event := sdl.PollEvent()
@@ -114,8 +119,7 @@ func main() {
 
 		console.StepSeconds(float64(diff) / 1000)
 
+		buffer.Blit(nil, surface, nil)
 		window.UpdateSurface()
 	}
-
-	surface.Unlock()
 }
