@@ -1,7 +1,6 @@
 package main
 
 import (
-	"image"
 	"log"
 )
 
@@ -90,15 +89,17 @@ type PPUDATA byte
 // 精灵 DMA 寄存器
 type OAMDMAR byte
 
+type Pixeler func(x byte, y byte, color uint)
+
 type PPU struct {
 	MemoryReadWriter
 	console *Console
 
+	pixeler Pixeler
+
 	palette   [32]byte
 	nameTable [2048]byte
 	oam       [256]byte
-	front     *image.RGBA
-	back      *image.RGBA
 
 	// 寄存器
 	PPUCTRL
@@ -172,10 +173,12 @@ type PPU struct {
 
 func NewPPU(console *Console) *PPU {
 	ppu := PPU{MemoryReadWriter: NewPPUMemory(console), console: console}
-	ppu.front = image.NewRGBA(image.Rect(0, 0, 256, 240))
-	ppu.back = image.NewRGBA(image.Rect(0, 0, 256, 240))
 	ppu.Power()
 	return &ppu
+}
+
+func (o *PPU) SetPixeler(pixeler Pixeler) {
+	o.pixeler = pixeler
 }
 
 func (ppu *PPU) readRegister(address uint16) byte {
@@ -283,7 +286,6 @@ func (o *PPU) writeDMA(v byte) {
 }
 
 func (o *PPU) setVBlank() {
-	o.front, o.back = o.back, o.front
 	o.nmiOccurred = true
 	o.nmiChange()
 }
@@ -558,8 +560,8 @@ func (o *PPU) spritePixel() (byte, byte) {
 }
 
 func (o *PPU) renderPixel() {
-	x := o.Cycle - 1
-	y := o.Scanline
+	x := byte(o.Cycle - 1)
+	y := byte(o.Scanline)
 
 	background := o.backgroundPixel()
 	i, sprite := o.spritePixel()
@@ -595,8 +597,10 @@ func (o *PPU) renderPixel() {
 		color = 0
 	}
 
-	c := Palette[o.readPalette(uint16(color))&0x3F]
-	o.back.SetRGBA(x, y, c)
+	c := paletteColors[o.readPalette(uint16(color))&0x3F]
+	if o.pixeler != nil {
+		o.pixeler(x, y, c)
+	}
 }
 
 func (o *PPU) copyX() {

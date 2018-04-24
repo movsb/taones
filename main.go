@@ -2,68 +2,12 @@ package main
 
 import (
 	"flag"
-	"image"
-	"log"
-	"runtime"
 
-	"github.com/go-gl/gl/v2.1/gl"
-	"github.com/go-gl/glfw/v3.1/glfw"
+	"github.com/veandco/go-sdl2/sdl"
 )
 
 var config struct {
 	opcodes bool
-}
-
-func init() {
-	// we need a parallel OS thread to avoid audio stuttering
-	runtime.GOMAXPROCS(2)
-
-	// we need to keep OpenGL calls on a single thread
-	runtime.LockOSThread()
-}
-
-func createTexture() uint32 {
-	var texture uint32
-	gl.GenTextures(1, &texture)
-	gl.BindTexture(gl.TEXTURE_2D, texture)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-	gl.BindTexture(gl.TEXTURE_2D, 0)
-	return texture
-}
-
-func setTexture(im *image.RGBA) {
-	size := im.Rect.Size()
-	gl.TexImage2D(
-		gl.TEXTURE_2D, 0, gl.RGBA, int32(size.X), int32(size.Y),
-		0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(im.Pix))
-}
-
-func drawBuffer(window *glfw.Window) {
-	w, h := window.GetFramebufferSize()
-	s1 := float32(w) / 256
-	s2 := float32(h) / 240
-	f := float32(1 - 0)
-	var x, y float32
-	if s1 >= s2 {
-		x = f * s2 / s1
-		y = f
-	} else {
-		x = f
-		y = f * s1 / s2
-	}
-	gl.Begin(gl.QUADS)
-	gl.TexCoord2f(0, 1)
-	gl.Vertex2f(-x, -y)
-	gl.TexCoord2f(1, 1)
-	gl.Vertex2f(x, -y)
-	gl.TexCoord2f(1, 0)
-	gl.Vertex2f(x, y)
-	gl.TexCoord2f(0, 0)
-	gl.Vertex2f(-x, y)
-	gl.End()
 }
 
 func main() {
@@ -71,85 +15,107 @@ func main() {
 	flag.Parse()
 
 	var err error
-	if err = glfw.Init(); err != nil {
-		panic(err)
-	}
-
-	defer glfw.Terminate()
-
-	window, err := glfw.CreateWindow(256, 240, "taones", nil, nil)
-	if err != nil {
-		panic(err)
-	}
-
-	window.MakeContextCurrent()
-
-	var focus bool
-
-	window.SetFocusCallback(func(w *glfw.Window, f bool) {
-		focus = f
-	})
-
-	// initialize gl
-	if err := gl.Init(); err != nil {
-		log.Fatalln(err)
-	}
-	gl.Enable(gl.TEXTURE_2D)
-
-	var lastTime float64
+	_ = err
 
 	console := NewConsole()
 	cartridge := LoadROM("smb.nes")
 	console.Run(cartridge)
 
+	if err = sdl.Init(sdl.INIT_EVERYTHING); err != nil {
+		panic(err)
+	}
+
+	defer sdl.Quit()
+
+	window, err := sdl.CreateWindow("taones",
+		sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED,
+		256, 240, sdl.WINDOW_SHOWN,
+	)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer window.Destroy()
+
+	wid, _ := window.GetID()
+
+	surface, err := window.GetSurface()
+	if err != nil {
+		panic(err)
+	}
+
+	var keys [8]bool
+	var turboA, turboB bool
+
 	kbdCtrl1 := NewKeyboardController(func(frameCounter uint64) [8]bool {
-		var keys [8]bool
+		var keys2 = keys
 
-		read := func(index byte, key glfw.Key) {
-			keys[index] = keys[index] || window.GetKey(key) == glfw.Press
-		}
-
-		read(ButtonA, glfw.KeyK)
-		read(ButtonB, glfw.KeyJ)
 		if frameCounter&3 == 0 {
-			read(ButtonA, glfw.KeyI)
-			read(ButtonB, glfw.KeyU)
+			keys2[ButtonA] = keys2[ButtonA] || turboA
+			keys2[ButtonB] = keys2[ButtonB] || turboB
 		}
-		read(ButtonSelect, glfw.KeyT)
-		read(ButtonStart, glfw.KeyY)
-		read(ButtonUp, glfw.KeyW)
-		read(ButtonDown, glfw.KeyS)
-		read(ButtonLeft, glfw.KeyA)
-		read(ButtonRight, glfw.KeyD)
 
-		return keys
+		return keys2
 	})
 
 	console.SetController1(kbdCtrl1)
 
-	texture := createTexture()
+	var lastTime uint32
 
-	for !window.ShouldClose() {
-		gl.Clear(gl.COLOR_BUFFER_BIT)
-		currTime := glfw.GetTime()
-		dt := currTime - lastTime
-		lastTime = currTime
-		if dt > 1 {
-			dt = 0
+	surface.Lock()
+	pixels := surface.Pixels()
+	console.ppu.SetPixeler(func(x byte, y byte, color uint) {
+		a := (uint(y)*256 + uint(x)) * 4
+		pixels[a+0] = byte(color >> 0x00 & 0xFF)
+		pixels[a+1] = byte(color >> 0x08 & 0xFF)
+		pixels[a+2] = byte(color >> 0x10 & 0xFF)
+		pixels[a+3] = byte(color >> 0x18 & 0xFF)
+	})
+
+	for run := true; run; {
+		event := sdl.PollEvent()
+		switch evt := event.(type) {
+		case *sdl.KeyboardEvent:
+			if evt.WindowID == wid {
+				switch evt.Keysym.Sym {
+				case sdl.K_w:
+					keys[ButtonUp] = evt.Type == sdl.KEYDOWN
+				case sdl.K_s:
+					keys[ButtonDown] = evt.Type == sdl.KEYDOWN
+				case sdl.K_a:
+					keys[ButtonLeft] = evt.Type == sdl.KEYDOWN
+				case sdl.K_d:
+					keys[ButtonRight] = evt.Type == sdl.KEYDOWN
+				case sdl.K_t:
+					keys[ButtonSelect] = evt.Type == sdl.KEYDOWN
+				case sdl.K_y:
+					keys[ButtonStart] = evt.Type == sdl.KEYDOWN
+				case sdl.K_j:
+					keys[ButtonB] = evt.Type == sdl.KEYDOWN
+				case sdl.K_k:
+					keys[ButtonA] = evt.Type == sdl.KEYDOWN
+				case sdl.K_u:
+					turboB = evt.Type == sdl.KEYDOWN
+				case sdl.K_i:
+					turboA = evt.Type == sdl.KEYDOWN
+				}
+			}
+		case *sdl.QuitEvent:
+			run = false
 		}
 
-		if focus {
-			console.StepSeconds(dt)
+		ticks := sdl.GetTicks()
+		diff := ticks - lastTime
+		if diff > 1000 {
+			diff = 0
 		}
+		lastTime = ticks
 
-		gl.BindTexture(gl.TEXTURE_2D, texture)
+		console.StepSeconds(float64(diff) / 1000)
 
-		setTexture(console.ppu.front)
-		drawBuffer(window)
-		gl.BindTexture(gl.TEXTURE_2D, 0)
-
-		window.SwapBuffers()
-		glfw.PollEvents()
+		window.UpdateSurface()
 	}
 
+	surface.Unlock()
 }
