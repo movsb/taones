@@ -72,8 +72,7 @@ func main() {
 	var lastTime uint32
 
 	for run := true; run; {
-		event := sdl.PollEvent()
-		switch evt := event.(type) {
+		switch evt := sdl.PollEvent().(type) {
 		case *sdl.KeyboardEvent:
 			if evt.WindowID == wid {
 				switch evt.Keysym.Sym {

@@ -75,10 +75,10 @@ func (o *PPUMemory) Read(a uint16) byte {
 	// 命名表 & 属性表
 	case a < 0x3F00:
 		mirror := o.console.cart.Mirror
-		return o.console.ppu.nameTable[mirrorAddress(mirror, a)%2048]
+		return o.console.ppu.nameTable[mirrorAddress(mirror, a)&0x07FF]
 	// 调色板
 	case a < 0x4000:
-		return o.console.ppu.readPalette(a % 32)
+		return o.console.ppu.readPalette(a & 0x1F)
 	default:
 		log.Fatalf("unhandled ppu memory read at: 0x%04X\n", a)
 	}
@@ -86,15 +86,15 @@ func (o *PPUMemory) Read(a uint16) byte {
 }
 
 func (o *PPUMemory) Write(a uint16, v byte) {
-	a = a % 0x4000
+	a = a & 0x3FFF
 	switch {
 	case a < 0x2000:
 		o.console.mapper.Write(a, v)
 	case a < 0x3F00:
 		mode := o.console.cart.Mirror
-		o.console.ppu.nameTable[mirrorAddress(mode, a)%2048] = v
+		o.console.ppu.nameTable[mirrorAddress(mode, a)&0x07FF] = v
 	case a < 0x4000:
-		o.console.ppu.writePalette(a%32, v)
+		o.console.ppu.writePalette(a&0x1F, v)
 	default:
 		log.Fatalf("unhandled ppu memory write at address: 0x%04X", a)
 	}
@@ -117,8 +117,8 @@ var mirrorLookup = [...][4]uint16{
 }
 
 func mirrorAddress(mode byte, a uint16) uint16 {
-	a = (a - 0x2000) % 0x1000
+	a = (a - 0x2000) & 0x0FFF
 	table := a / 0x0400
-	offset := a % 0x0400
+	offset := a & 0x03FF
 	return 0x2000 + mirrorLookup[mode][table]*0x0400 + offset
 }

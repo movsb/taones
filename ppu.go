@@ -282,7 +282,7 @@ func (o *PPU) Power() {
 func (ppu *PPU) readData() byte {
 	value := ppu.Read(ppu.v)
 	// emulate buffered reads
-	if ppu.v%0x4000 < 0x3F00 {
+	if ppu.v&0x3FFF < 0x3F00 {
 		buffered := ppu.bufferedData
 		ppu.bufferedData = value
 		value = buffered
@@ -866,7 +866,7 @@ func (o *PPU) Step() {
 		}
 	}
 
-	if o.Scanline == 260 && o.Cycle == 340 {
+	if o.Scanline == 0 && o.Cycle == 0 {
 		if o.fps.Calc(o.FrameCount) {
 			log.Println("FPS:", o.fps.Last())
 		}
