@@ -2,7 +2,45 @@ package main
 
 import (
 	"log"
+	"time"
 )
+
+type FPSCalculator struct {
+	lastFPS     float64 // 上一次的FPS
+	lastTime    int64   // 上一次的时间
+	smoothing   float64 // 平滑过渡参数
+	countPeriod uint    // 统计周期
+	count       uint    // 已统计次数
+}
+
+func NewFPSCalculator() *FPSCalculator {
+	return &FPSCalculator{
+		smoothing:   0.8,
+		countPeriod: 60,
+	}
+}
+
+func (o *FPSCalculator) Last() uint {
+	return uint(o.lastFPS)
+}
+
+func (o *FPSCalculator) Calc(frames uint64) bool {
+	if o.count++; o.count != o.countPeriod {
+		return false
+	}
+
+	now := time.Now().UnixNano()
+	elapsed := now - o.lastTime
+	currFPS := float64(o.countPeriod) / float64(elapsed) * 1e9
+
+	fps := o.lastFPS*(1-o.smoothing) + currFPS*o.smoothing
+
+	o.lastFPS = fps
+	o.lastTime = now
+	o.count = 0
+
+	return true
+}
 
 // PPU 控制寄存器 $2000
 type PPUCTRL struct {
@@ -169,10 +207,13 @@ type PPU struct {
 	spritePositions [8]byte
 	spritePriorites [8]byte
 	spriteIndexes   [8]byte
+
+	fps *FPSCalculator
 }
 
 func NewPPU(console *Console) *PPU {
 	ppu := PPU{MemoryReadWriter: NewPPUMemory(console), console: console}
+	ppu.fps = NewFPSCalculator()
 	ppu.Power()
 	return &ppu
 }
@@ -807,6 +848,12 @@ func (o *PPU) Step() {
 			o.clrVBlank()
 			o.statSpriteHit = 0
 			o.statSpriteOverflow = 0
+		}
+	}
+
+	if o.Scanline == 260 && o.Cycle == 340 {
+		if o.fps.Calc(o.FrameCount) {
+			log.Println("FPS:", o.fps.Last())
 		}
 	}
 }
