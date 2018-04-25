@@ -127,13 +127,14 @@ type PPUDATA byte
 // 精灵 DMA 寄存器
 type OAMDMAR byte
 
-type Pixeler func(x byte, y byte, color uint)
+type Pixeler func(x int, y int, color uint)
 
 type PPU struct {
 	MemoryReadWriter
 	console *Console
 
 	pixeler Pixeler
+	buffer  []byte
 
 	palette   [32]byte
 	nameTable [2048]byte
@@ -220,6 +221,13 @@ func NewPPU(console *Console) *PPU {
 
 func (o *PPU) SetPixeler(pixeler Pixeler) {
 	o.pixeler = pixeler
+}
+
+func (o *PPU) SetBuffer(buf []byte) {
+	o.buffer = buf
+	if buf != nil && cap(buf) < 256*240 {
+		panic("invalid buffer dimension")
+	}
 }
 
 func (ppu *PPU) readRegister(address uint16) byte {
@@ -601,8 +609,8 @@ func (o *PPU) spritePixel() (byte, byte) {
 }
 
 func (o *PPU) renderPixel() {
-	x := byte(o.Cycle - 1)
-	y := byte(o.Scanline)
+	x := o.Cycle - 1
+	y := o.Scanline
 
 	background := o.backgroundPixel()
 	i, sprite := o.spritePixel()
@@ -639,7 +647,14 @@ func (o *PPU) renderPixel() {
 	}
 
 	c := paletteColors[o.readPalette(uint16(color))&0x3F]
-	if o.pixeler != nil {
+
+	if o.buffer != nil { // 如果设置了缓冲区
+		a := (y*256 + x) * 4
+		o.buffer[a+3] = byte(c >> 24)
+		o.buffer[a+0] = byte(c >> 0)
+		o.buffer[a+1] = byte(c >> 8)
+		o.buffer[a+2] = byte(c >> 16)
+	} else if o.pixeler != nil { // 如果设置了函数回调
 		o.pixeler(x, y, c)
 	}
 }

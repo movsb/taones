@@ -50,6 +50,9 @@ func main() {
 		panic(err)
 	}
 
+	bufPixels := buffer.Pixels()
+	console.ppu.SetBuffer(bufPixels)
+
 	var keys [8]bool
 	var turboA, turboB bool
 
@@ -65,16 +68,6 @@ func main() {
 	})
 
 	console.SetController1(kbdCtrl1)
-
-	bufPixels := buffer.Pixels()
-
-	console.ppu.SetPixeler(func(x byte, y byte, c uint) {
-		a := (uint(y)*256 + uint(x)) * 4
-		bufPixels[a+0] = byte(c >> 0)
-		bufPixels[a+1] = byte(c >> 8)
-		bufPixels[a+2] = byte(c >> 16)
-		bufPixels[a+3] = byte(c >> 24)
-	})
 
 	var lastTime uint32
 
