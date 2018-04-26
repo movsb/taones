@@ -54,7 +54,7 @@ var opcodesTable = [...]OpCode{
 	// and
 	{0x29, "AND", 2, 2, 0, amImmediate},
 	{0x25, "AND", 2, 3, 0, amZero},
-	{0x35, "AND", 3, 4, 0, amZeroX},
+	{0x35, "AND", 2, 4, 0, amZeroX},
 	{0x2D, "AND", 3, 4, 0, amAbsolute},
 	{0x3D, "AND", 3, 4, 1, amAbsoluteX},
 	{0x39, "AND", 2, 4, 1, amAbsoluteY},

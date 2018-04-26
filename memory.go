@@ -43,7 +43,7 @@ func (o *CPUMemory) Write(a uint16, v byte) {
 		o.console.cpu.RAM[a&0x07FF] = v
 	case a < 0x4000:
 		o.console.ppu.writeRegister(0x2000+a&7, v)
-	case a < 0x4013:
+	case a < 0x4014:
 		break
 	case a == 0x4014:
 		o.console.ppu.writeRegister(a, v)

@@ -347,7 +347,7 @@ func (o *PPU) clrVBlank() {
 // 写 $2000
 func (o *PPU) writeControl(v byte) {
 	o.PPUCTRL.Set(v)
-	// TODO nmiOutput
+	o.nmiChange()
 	// PPU_scrolling
 	// t: ...BA.. ........ = d: ......BA
 	o.t = o.t&0x73FF | uint16(v)&0x0003<<10
