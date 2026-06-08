@@ -13,7 +13,7 @@ var config struct {
 
 func main() {
 	flag.BoolVar(&config.opcodes, "opcodes", false, "show opcodes")
-	flag.UintVar(&config.scale, "scale", 2, "video scaler")
+	flag.UintVar(&config.scale, "scale", 1, "video scaler")
 	flag.Parse()
 
 	var err error
