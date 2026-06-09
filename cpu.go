@@ -5,7 +5,7 @@ import (
 )
 
 // https://www.nesdev.org/wiki/CPU
-const cpuFreq = 1789773
+const cpuFreq = 1500000 // 1789773
 
 // 寻址模式（Addressing Modes）
 const (
