@@ -157,6 +157,7 @@ type PPU struct {
 	// 奇帧比偶帧少一个周期
 	oddFrame bool
 
+	sync        func()
 	nmiOccurred bool // 中断标志：进入 VBlank
 	nmiPrevious bool
 	nmiDelay    byte
@@ -228,6 +229,10 @@ func (o *PPU) SetBuffer(buf []byte) {
 	if buf != nil && cap(buf) < 256*240 {
 		panic("invalid buffer dimension")
 	}
+}
+
+func (o *PPU) SetSync(sync func()) {
+	o.sync = sync
 }
 
 func (ppu *PPU) readRegister(address uint16) byte {
@@ -337,6 +342,7 @@ func (o *PPU) writeDMA(v byte) {
 func (o *PPU) setVBlank() {
 	o.nmiOccurred = true
 	o.nmiChange()
+	o.sync()
 }
 
 func (o *PPU) clrVBlank() {

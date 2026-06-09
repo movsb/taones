@@ -87,6 +87,11 @@ func main() {
 	var originRect = &sdl.Rect{0, 0, 256, 240}
 	var scaledRect = &sdl.Rect{0, 0, 256 * int32(config.scale), 240 * int32(config.scale)}
 
+	console.ppu.SetSync(func() {
+		buffer.BlitScaled(originRect, surface, scaledRect)
+		window.UpdateSurface()
+	})
+
 	for run := true; run; {
 		switch evt := sdl.PollEvent().(type) {
 		case *sdl.KeyboardEvent:
@@ -127,10 +132,6 @@ func main() {
 
 		console.StepSeconds(float64(diff) / 1000)
 		queueAudio(audioDevice, console.apu)
-
-		buffer.BlitScaled(originRect, surface, scaledRect)
-
-		window.UpdateSurface()
 	}
 }
 
