@@ -25,10 +25,12 @@ func (o *CPUMemory) Read(a uint16) byte {
 		return o.console.ppu.readRegister(0x2000 + a&7)
 	case a == 0x4014:
 		return o.console.ppu.readRegister(a)
+	case a == 0x4015:
+		return o.console.apu.ReadRegister(a)
 	case a == 0x4016:
 		return o.console.ctrl1.Read()
 	case a == 0x4017:
-		break
+		return o.console.apu.ReadRegister(a)
 	case a >= 0x6000:
 		return o.console.mapper.Read(a)
 	default:
@@ -44,13 +46,15 @@ func (o *CPUMemory) Write(a uint16, v byte) {
 	case a < 0x4000:
 		o.console.ppu.writeRegister(0x2000+a&7, v)
 	case a < 0x4014:
-		break
+		o.console.apu.WriteRegister(a, v)
 	case a == 0x4014:
 		o.console.ppu.writeRegister(a, v)
+	case a == 0x4015:
+		o.console.apu.WriteRegister(a, v)
 	case a == 0x4016:
 		o.console.ctrl1.Flush(o.console.ppu.FrameCount)
 	case a < 0x4018:
-		break
+		o.console.apu.WriteRegister(a, v)
 	case a >= 0x6000:
 		o.console.mapper.Write(a, v)
 	default:

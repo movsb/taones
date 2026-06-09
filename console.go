@@ -3,6 +3,7 @@ package main
 type Console struct {
 	cpu    *CPU
 	ppu    *PPU
+	apu    *APU
 	cart   *Cartridge
 	mapper Mapper
 	ctrl1  ControllerProvider
@@ -12,6 +13,7 @@ func NewConsole() *Console {
 	console := &Console{}
 	console.cpu = NewCPU(console)
 	console.ppu = NewPPU(console)
+	console.apu = NewAPU(console)
 	console.ctrl1 = &EmptyController{}
 	return console
 }
@@ -26,6 +28,9 @@ func (o *Console) Step() int {
 	for ; ppuCycles > 0; ppuCycles-- {
 		o.ppu.Step()
 	}
+	for apuCycles := cpuCycles; apuCycles > 0; apuCycles-- {
+		o.apu.Step()
+	}
 	return cpuCycles
 }
 
@@ -38,6 +43,7 @@ func (o *Console) StepSeconds(s float64) {
 
 func (o *Console) Reset() {
 	o.cpu.Reset()
+	o.apu.Reset()
 }
 
 func (o *Console) Run(cart *Cartridge) {

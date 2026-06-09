@@ -4,6 +4,7 @@ import (
 	"fmt"
 )
 
+// https://www.nesdev.org/wiki/CPU
 const cpuFreq = 1789773
 
 // 寻址模式（Addressing Modes）
@@ -42,7 +43,7 @@ type OpCode struct {
 
 var opcodesTable = [...]OpCode{
 	// adc
-	{0x69, "ADC", 2, 3, 0, amImmediate},
+	{0x69, "ADC", 2, 2, 0, amImmediate},
 	{0x65, "ADC", 2, 3, 0, amZero},
 	{0x75, "ADC", 2, 4, 0, amZeroX},
 	{0x6D, "ADC", 3, 4, 0, amAbsolute},
@@ -57,12 +58,12 @@ var opcodesTable = [...]OpCode{
 	{0x35, "AND", 2, 4, 0, amZeroX},
 	{0x2D, "AND", 3, 4, 0, amAbsolute},
 	{0x3D, "AND", 3, 4, 1, amAbsoluteX},
-	{0x39, "AND", 2, 4, 1, amAbsoluteY},
+	{0x39, "AND", 3, 4, 1, amAbsoluteY},
 	{0x21, "AND", 2, 6, 0, amIndexedIndirect},
 	{0x31, "AND", 2, 5, 1, amIndirectIndexed},
 
 	// asl
-	{0x0A, "ASL", 1, 3, 0, amAccumulator},
+	{0x0A, "ASL", 1, 2, 0, amAccumulator},
 	{0x06, "ASL", 2, 5, 0, amZero},
 	{0x16, "ASL", 2, 6, 0, amZeroX},
 	{0x0E, "ASL", 3, 6, 0, amAbsolute},

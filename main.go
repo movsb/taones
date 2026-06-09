@@ -11,9 +11,14 @@ var config struct {
 	scale   uint
 }
 
+const (
+	audioQueueLowBytes = audioSampleRate / 20 * 2
+	audioQueueMaxBytes = audioSampleRate / 10 * 2
+)
+
 func main() {
 	flag.BoolVar(&config.opcodes, "opcodes", false, "show opcodes")
-	flag.UintVar(&config.scale, "scale", 1, "video scaler")
+	flag.UintVar(&config.scale, "scale", 2, "video scaler")
 	flag.Parse()
 
 	var err error
@@ -28,6 +33,12 @@ func main() {
 	}
 
 	defer sdl.Quit()
+
+	audioDevice, err := openAudioDevice()
+	if err != nil {
+		panic(err)
+	}
+	defer sdl.CloseAudioDevice(audioDevice)
 
 	window, err := sdl.CreateWindow("taones",
 		sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED,
@@ -115,9 +126,53 @@ func main() {
 		lastTime = ticks
 
 		console.StepSeconds(float64(diff) / 1000)
+		queueAudio(audioDevice, console.apu)
 
 		buffer.BlitScaled(originRect, surface, scaledRect)
 
 		window.UpdateSurface()
+	}
+}
+
+func openAudioDevice() (sdl.AudioDeviceID, error) {
+	desired := &sdl.AudioSpec{
+		Freq:     audioSampleRate,
+		Format:   sdl.AUDIO_S16LSB,
+		Channels: 1,
+		Samples:  1024,
+	}
+	obtained := &sdl.AudioSpec{}
+
+	device, err := sdl.OpenAudioDevice("", false, desired, obtained, 0)
+	if err != nil {
+		return 0, err
+	}
+	sdl.PauseAudioDevice(device, false)
+	return device, nil
+}
+
+func queueAudio(device sdl.AudioDeviceID, apu *APU) {
+	samples := apu.TakeSamples()
+	if len(samples) == 0 {
+		return
+	}
+
+	queued := sdl.GetQueuedAudioSize(device)
+	if queued >= audioQueueLowBytes {
+		return
+	}
+
+	available := audioQueueMaxBytes - queued
+	if available == 0 {
+		return
+	}
+	if uint32(len(samples)) > available {
+		samples = samples[:available&^1]
+	}
+	if len(samples) == 0 {
+		return
+	}
+	if err := sdl.QueueAudio(device, samples); err != nil {
+		panic(err)
 	}
 }
